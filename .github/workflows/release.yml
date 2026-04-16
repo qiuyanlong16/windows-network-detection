@@ -1,0 +1,40 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.0.0)"
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish single-file exe
+        working-directory: NetworkDetector
+        run: dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:Version=${{ inputs.version }} -o ../bin
+
+      - name: Package as zip
+        working-directory: bin
+        run: Compress-Archive -Path NetworkDetector.exe -DestinationPath "NetworkDetector-${{ inputs.version }}-win-x64.zip"
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" `
+            --title "v${{ inputs.version }}" `
+            --generate-notes `
+            --draft `
+            "bin/NetworkDetector-${{ inputs.version }}-win-x64.zip"
