@@ -32,7 +32,7 @@ public static class TcpProbe
 
                     return new NetworkResult(
                         NetworkStatus.Online,
-                        3,
+                        4,
                         sw.ElapsedMilliseconds,
                         $"{ip}:{port}");
                 }

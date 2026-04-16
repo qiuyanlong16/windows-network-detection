@@ -6,13 +6,16 @@ var useJson = args.Contains("--json");
 
 NetworkResult? result = null;
 
-// Layer 1: NCSI
+// Layer 1: NCSI (fastest, zero network I/O)
 result ??= NcsiProbe.TryDetect();
 
-// Layer 2: DNS
+// Layer 2: DNS (UDP query to public DNS servers)
 result ??= DnsProbe.TryDetect();
 
-// Layer 3: TCP
+// Layer 3: HTTP (bypasses proxy, verifies real internet reachability)
+result ??= HttpProbe.TryDetect();
+
+// Layer 4: TCP connect (raw SYN, last resort)
 result ??= TcpProbe.TryDetect();
 
 // If all layers failed, mark as offline
