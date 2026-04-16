@@ -6,43 +6,55 @@ namespace NetworkDetector;
 
 public static class HttpProbe
 {
-    // Windows NCSI uses this endpoint — returns 204 No Content instantly
-    private const string TestUrl = "http://connectivitycheck.gstatic.com/generate_204";
+    // Endpoints that return a known, verifiable response
+    private static readonly string[] TestUrls =
+    [
+        "http://connectivitycheck.gstatic.com/generate_204",
+        "http://cp.cloudflare.com/",
+    ];
 
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(2);
 
     public static NetworkResult? TryDetect()
     {
-        try
+        foreach (var url in TestUrls)
         {
-            var sw = Stopwatch.StartNew();
-            using var handler = new HttpClientHandler
+            try
             {
-                AllowAutoRedirect = false,
-                UseProxy = false, // Bypass proxy to test raw connectivity
-                DefaultProxyCredentials = null,
-            };
-            using var client = new HttpClient(handler)
-            {
-                Timeout = Timeout,
-            };
+                var sw = Stopwatch.StartNew();
+                using var handler = new HttpClientHandler
+                {
+                    AllowAutoRedirect = false,
+                    UseProxy = false,
+                    DefaultProxyCredentials = null,
+                };
+                using var client = new HttpClient(handler) { Timeout = Timeout };
 
-            var response = client.GetAsync(TestUrl).GetAwaiter().GetResult();
-            sw.Stop();
+                var response = client.GetAsync(url).GetAwaiter().GetResult();
+                sw.Stop();
 
-            // 204 = genuine internet reachability
-            if ((int)response.StatusCode == 204)
-            {
-                return new NetworkResult(
-                    NetworkStatus.Online,
-                    3,
-                    sw.ElapsedMilliseconds,
-                    $"HTTP {response.StatusCode}");
+                // Verify actual response body to guard against proxy returning fake status
+                var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                var statusCode = (int)response.StatusCode;
+
+                // gstatic returns empty 204; cloudflare returns a short HTML page
+                bool isValid = (statusCode == 204 && string.IsNullOrEmpty(body))
+                            || (statusCode == 200 && body.Contains("cloudflare"));
+
+                if (isValid)
+                {
+                    return new NetworkResult(
+                        NetworkStatus.Online,
+                        3,
+                        sw.ElapsedMilliseconds,
+                        $"HTTP {statusCode}");
+                }
             }
-        }
-        catch
-        {
-            // Failed — fall through to next layer
+            catch
+            {
+                // Failed — try next endpoint
+                continue;
+            }
         }
 
         return null;
